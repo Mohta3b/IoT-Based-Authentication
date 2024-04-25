@@ -1,12 +1,16 @@
 #include <LiquidCrystal_I2C.h>
-LiquidCrystal_I2C lcd(0x20, 16, 2); // run ic2_scanner sketch and get the IC2 address, which is 0x3f in my case, it could be 0x3f in many cases
+
+LiquidCrystal_I2C lcd(0x20, 16, 2);  // run ic2_scanner sketch and get the IC2 address, which is 0x3f in my case, it could be 0x3f in many cases
 
 const int redLedPin = 13;
 const int greenLedPin = 12;
 const int dcMotorPin1 = 7;
 const int dcMotorPin2 = 6;
 const int terminalPin = 1;
-#define VALID_RFID_TIME 30000
+
+#define VALID_RFID_TIME 10000
+#define RFID_LEN 10
+
 enum AccessStatus {
   IDEAL,
   GRANT,
@@ -21,6 +25,19 @@ String rfidList[MAX_RFIDS] = {
   "1111111111",
   "0000000000"
 };
+
+unsigned long int accessTime = 0;
+
+
+struct UserInfo {
+  String name;
+  String id;
+  bool access = false;
+};
+
+UserInfo userInfo;
+
+bool isDoorOpen = false;
 
 void setup() {
   lcd.init();
@@ -47,128 +64,130 @@ void setup() {
   // delay(10000);
 }
 
-int accessTime = 0;
-String userInfo;
+String inputRfid = "";
 
 void loop() {
   // put your main code here, to run repeatedly:
-  String inputRfid = readInput();
-  if (inputRfid != "false") // if input is entered on terminal
-    checkRFID(inputRfid); // set access status to grant or deny
-
-  if (accessStatus == GRANT){ 
-    if (accessTime - millis() >= VALID_RFID_TIME) {
-      closeDoor();
-    }
-    else if (accessTime == 0){
+  readInput();
+  if (inputRfid.length() > RFID_LEN || accessStatus == DENY){
+    inputRfid = "";
+    Serial.flush();
+  }
+  if (inputRfid.length() == RFID_LEN) {  // if input is entered on terminal
+    checkRFID(inputRfid);                // set access status to grant or deny
+    Serial.println(inputRfid);
+    inputRfid = "";
+  }
+  if (accessStatus == GRANT) {
+    if (accessTime == 0) {
       grantAccess();
+    } else if (millis() - accessTime >= VALID_RFID_TIME) {
+      closeDoor();
+      idealMode();
     }
-  }
-  else if (accessStatus == DENY){
+  } else if (accessStatus == DENY) {
     denyAccess();
+    delay(3000);
+    idealMode();
   }
 
-
-
-
-  // Read input from terminal
-  // int input = digitalRead(terminalPin);
-
-  // // if (input == HIGH) { // If input is 1
-  //   digitalWrite(greenLedPin, HIGH); // Turn on green LED
-  //   digitalWrite(redLedPin, LOW); // Turn off red LED
-  //   shiftRight(); // Shift motor right 90 degrees
-  // // } else { // If input is 0
-  //   delay(5000);
-  //   digitalWrite(redLedPin, HIGH); // Turn on red LED
-  //   digitalWrite(greenLedPin, LOW); // Turn off green LED
-  //   shiftLeft(); // Shift motor left 90 degrees
-  // // }
-
-  delay(1000); // Delay to avoid rapid toggling
+  //delay(100);  // Delay to avoid rapid toggling
 }
 
-void checkRFID(String inputRfid){
+void idealMode() {
+  accessStatus = IDEAL;
+  Serial.flush();
+  inputRfid = "";
+  lcd.clear();
+  lcd.print(" Scan");
+  lcd.setCursor(0, 1);
+  lcd.print(" Your ID");
+  digitalWrite(redLedPin, LOW);    // Turn off red LED
+  digitalWrite(greenLedPin, LOW);  // Turn off green LED
+}
+
+void checkRFID(String inputRfid) {
+  userInfo.access = false;
+  accessStatus = DENY;
   for (int i = 0; i < MAX_RFIDS; i++) {
-    if (inputRfid == rfidList[i]){
+    if (inputRfid == rfidList[i]) {
       accessStatus = GRANT;
-      userInfo = "ID: " + rfidList[i] + "Name:";
+      // accessTime = millis();
+      userInfo.access = true;
+      userInfo.id = rfidList[i];
+      userInfo.name = "John";
+      break;
     }
   }
 }
 
-void closeDoor(){
-  accessStatus = IDEAL;
+void closeDoor() {
   accessTime = 0;
+  isDoorOpen = false;
 
   // TODO: shift dc motor
-
+  shiftMotorLeft();
 }
 
-void grantAccess(){
+void grantAccess() {
   accessTime = millis();
   // turn on green LED
-
-  // open door (turn right the DC motor 90 degrees)
+  digitalWrite(greenLedPin, HIGH);  // Turn on green LED
+  digitalWrite(redLedPin, LOW);     // Turn off red LED
 
   // display the information of the person on the LCD
+  lcdShowMessage(userInfo);
 
+  // open door (turn right the DC motor 90 degrees)
+  if (!isDoorOpen)
+    shiftMotorRight();
+  isDoorOpen = true;
 }
 
-void denyAccess(){
-  // turn on red LED
+void lcdShowMessage(UserInfo user) {
+  lcd.clear();
+  if (user.access == false) {
+    lcd.print(" ACCESS DENIED!");
+    lcd.setCursor(0, 1);
+    lcd.print("Wait 3 seconds!");
+  } else {
+    lcd.print(" ACCESS GRANTED!");
+    lcd.setCursor(0, 1);
+    lcd.print(" " + user.name + " " + user.id);
+  }
+}
 
-  // close door (turn left DC motor 90 degrees)
+void denyAccess() {
+  // turn on red LED
+  digitalWrite(redLedPin, HIGH);   // Turn on red LED
+  digitalWrite(greenLedPin, LOW);  // Turn off green LED
 
   // display "ACCESS DENIED" on the LCD
+  lcdShowMessage(userInfo);
 
-
-  delay(4000)
-  accessStatus = IDEAL;
+  // close door (turn left DC motor 90 degrees)
+  if (isDoorOpen)
+    closeDoor();
 }
 
-String readInput() {
-  String inputString = "";
-  boolean stringComplete = false;
-
-  while (Serial.available()) {
-    // Read the incoming byte
-    char inChar = (char)Serial.read();
-
-    // If the incoming character is a newline, set stringComplete flag to true
-    if (inChar == '\n') {
-      stringComplete = true;
-    } else {
-      // Add the incoming character to the inputString
-      inputString += inChar;
-    }
+void readInput() {
+  while (Serial.available() > 0) {
+    char c = Serial.read();
+    inputRfid += c;
   }
-
-  // If a complete string has been received
-  if (stringComplete) {
-    // Print the received string
-    // Serial.println("Received: " + inputString);
-
-    // Clear the inputString and reset stringComplete flag
-    inputString = "";
-    stringComplete = false;
-
-    return inputString;
-  }
-  return "false";
 }
 
-void shiftRight() {
+void shiftMotorRight() {
   digitalWrite(dcMotorPin1, HIGH);
   digitalWrite(dcMotorPin2, LOW);
-  delay(1000); // Adjust this delay to control motor speed and angle
+  delay(300);  // Adjust this delay to control motor speed and angle
   stopMotor();
 }
 
-void shiftLeft() {
+void shiftMotorLeft() {
   digitalWrite(dcMotorPin1, LOW);
   digitalWrite(dcMotorPin2, HIGH);
-  delay(1000); // Adjust this delay to control motor speed and angle
+  delay(300);  // Adjust this delay to control motor speed and angle
   stopMotor();
 }
 
