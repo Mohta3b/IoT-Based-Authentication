@@ -2,8 +2,8 @@
 
 LiquidCrystal_I2C lcd(0x20, 16, 2);  // run ic2_scanner sketch and get the IC2 address, which is 0x3f in my case, it could be 0x3f in many cases
 
-const int redLedPin = 13;
-const int greenLedPin = 12;
+const int redLedPin = 9;
+const int greenLedPin = 8;
 const int dcMotorPin1 = 7;
 const int dcMotorPin2 = 6;
 const int terminalPin = 1;
@@ -26,13 +26,13 @@ String rfidList[MAX_RFIDS] = {
   "0000000000"
 };
 
-unsigned long int accessTime = 0;
 
 
 struct UserInfo {
   String name;
   String id;
   bool access = false;
+  unsigned long int accessTime = 0;
 };
 
 UserInfo userInfo;
@@ -69,7 +69,7 @@ String inputRfid = "";
 void loop() {
   // put your main code here, to run repeatedly:
   readInput();
-  if (inputRfid.length() > RFID_LEN || accessStatus == DENY){
+  if (inputRfid.length() > RFID_LEN || accessStatus == DENY) {
     inputRfid = "";
     Serial.flush();
   }
@@ -79,9 +79,9 @@ void loop() {
     inputRfid = "";
   }
   if (accessStatus == GRANT) {
-    if (accessTime == 0) {
+    if (userInfo.accessTime == 0) {
       grantAccess();
-    } else if (millis() - accessTime >= VALID_RFID_TIME) {
+    } else if (millis() - userInfo.accessTime >= VALID_RFID_TIME) {
       closeDoor();
       idealMode();
     }
@@ -112,7 +112,7 @@ void checkRFID(String inputRfid) {
   for (int i = 0; i < MAX_RFIDS; i++) {
     if (inputRfid == rfidList[i]) {
       accessStatus = GRANT;
-      // accessTime = millis();
+      // userInfo.accessTime = millis();
       userInfo.access = true;
       userInfo.id = rfidList[i];
       userInfo.name = "John";
@@ -121,16 +121,9 @@ void checkRFID(String inputRfid) {
   }
 }
 
-void closeDoor() {
-  accessTime = 0;
-  isDoorOpen = false;
-
-  // TODO: shift dc motor
-  shiftMotorLeft();
-}
 
 void grantAccess() {
-  accessTime = millis();
+  userInfo.accessTime = millis();
   // turn on green LED
   digitalWrite(greenLedPin, HIGH);  // Turn on green LED
   digitalWrite(redLedPin, LOW);     // Turn off red LED
@@ -144,19 +137,6 @@ void grantAccess() {
   isDoorOpen = true;
 }
 
-void lcdShowMessage(UserInfo user) {
-  lcd.clear();
-  if (user.access == false) {
-    lcd.print(" ACCESS DENIED!");
-    lcd.setCursor(0, 1);
-    lcd.print("Wait 3 seconds!");
-  } else {
-    lcd.print(" ACCESS GRANTED!");
-    lcd.setCursor(0, 1);
-    lcd.print(" " + user.name + " " + user.id);
-  }
-}
-
 void denyAccess() {
   // turn on red LED
   digitalWrite(redLedPin, HIGH);   // Turn on red LED
@@ -168,6 +148,27 @@ void denyAccess() {
   // close door (turn left DC motor 90 degrees)
   if (isDoorOpen)
     closeDoor();
+}
+
+void closeDoor() {
+  userInfo.accessTime = 0;
+  isDoorOpen = false;
+
+  // TODO: shift dc motor
+  shiftMotorLeft();
+}
+
+void lcdShowMessage(UserInfo user) {
+  lcd.clear();
+  if (user.access == false) {
+    lcd.print(" ACCESS DENIED!");
+    lcd.setCursor(0, 1);
+    lcd.print("Wait 3 seconds!");
+  } else {
+    lcd.print(" ACCESS GRANTED!");
+    lcd.setCursor(0, 1);
+    lcd.print(" " + user.name + " " + user.id);
+  }
 }
 
 void readInput() {
