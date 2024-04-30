@@ -7,40 +7,16 @@ static byte gwip[] = { 192, 168, 2, 1 };  // Gateway IP address
 // MAC address of the Arduino
 static byte mymac[] = { 0x72, 0x19, 0x69, 0x2D, 0x30, 0x38 };
 
-const char website[] PROGMEM = "192.168.2.1";
+// website is localhost on port 80
+const byte serverIp[] = { 192, 168, 2, 1 };
+const char website[] PROGMEM = "localhost";
 
-byte Ethernet::buffer[700];
-
-// Welcome page HTML content (stored in PROGMEM)
-const char welcomePage[] PROGMEM =
-  "<!DOCTYPE html>"
-  "<html lang='en'>"
-  "<head>"
-  "<meta charset='UTF-8'>"
-  "<meta name='viewport' content='width=device-width, initial-scale=1.0'>"
-  "<title>RFID Scanner</title>"
-  "<style>"
-  "body {"
-  "font-family: Arial, sans-serif;"
-  "background-color: #f0f0f0;"
-  "text-align: center;"
-  "padding: 20px;"
-  "}"
-  "h1 {"
-  "color: #333333;"
-  "}"
-  "p {"
-  "color: #666666;"
-  "}"
-  "</style>"
-  "</head>"
-  "<body>"
-  "<h1>First PCP Course Project</h1>"
-  "<p>Scan your RFID and if your id was valid, your access will be granted! </p>"
-  "</body>"
-  "</html>";
+// subdomain to connect to is /verification
+const char url[] PROGMEM = "verification";
+static byte hisip[] = { 192, 168, 2, 1 };
 
 // Ethernet buffer size
+byte Ethernet::buffer[700];
 
 LiquidCrystal_I2C lcd(0x20, 16, 2);  // run ic2_scanner sketch and get the IC2 address, which is 0x3f in my case, it could be 0x3f in many cases
 
@@ -61,18 +37,10 @@ enum AccessStatus {
 
 AccessStatus accessStatus = IDEAL;
 
-const int MAX_RFIDS = 3;
-String rfidList[MAX_RFIDS] = {
-  "1234567890",
-  "1111111111",
-  "0000000000"
-};
-
 struct UserInfo {
   String name;
   String id;
   bool access = false;
-  // accessTimeDate
   String accessTimeDate;
   unsigned long int accessTime = 0;
 };
@@ -81,9 +49,14 @@ UserInfo userInfo;
 
 bool isDoorOpen = false;
 
+int count = 0;
+
+Stash stash;
+static byte session;
+
 void setup() {
   lcd.init();
-  // put your setup code here, to run once:
+
   // Initialize pins
   pinMode(redLedPin, OUTPUT);
   pinMode(greenLedPin, OUTPUT);
@@ -105,11 +78,16 @@ void setup() {
 
   Serial.begin(9600);
 
-  // Begin Ethernet communication with buffer size and MAC address
-  ether.begin(sizeof Ethernet::buffer, mymac, SS);
 
-  // Configure static IP and gateway IP
+  // Begin Ethernet communication with buffer size and MAC address
+  if (ether.begin(sizeof Ethernet::buffer, mymac, SS) == 0) {
+    // logTerminal.println("Failed to initialize ethernet card.");
+    Serial.println("Failed to initialize ethernet card.");
+  }
   ether.staticSetup(myip, gwip);
+
+  ether.copyIp(ether.hisip, serverIp);
+  ether.persistTcpConnection(true);
 }
 
 String inputRfid = "";
@@ -118,15 +96,20 @@ void loop() {
   // put your main code here, to run repeatedly:
   readInput();
 
+  word pos = ether.packetLoop(ether.packetReceive());
+
   if (inputRfid.length() > RFID_LEN || accessStatus == DENY) {
     inputRfid = "";
     Serial.flush();
   }
   if (inputRfid.length() == RFID_LEN) {  // if input is entered on terminal
     Serial.println(inputRfid);
-    checkRFID(inputRfid);  // set access status to grant or deny
+    sendRFIDtoServer(inputRfid);  // set access status to grant or deny
     inputRfid = "";
   }
+
+  recieveServerResponse();
+
   if (accessStatus == GRANT) {
     if (userInfo.accessTime == 0) {
       grantAccess();
@@ -155,72 +138,76 @@ void idealMode() {
   digitalWrite(greenLedPin, LOW);  // Turn off green LED
 }
 
-// void checkRFID(String inputRfid) {
-//   userInfo.access = false;
-//   accessStatus = DENY;
-//   for (int i = 0; i < MAX_RFIDS; i++) {
-//     if (inputRfid == rfidList[i]) {
-//       accessStatus = GRANT;
-//       // userInfo.accessTime = millis();
-//       userInfo.access = true;
-//       userInfo.id = rfidList[i];
-//       userInfo.name = "John";
-//       break;
-//     }
-//   }
-// }
 
-void checkRFID(String inputRfid) {
-  // sent the RFID to the server and get the response
-  userInfo.access = false;
-  accessStatus = DENY;
-  UserInfo serverResponse = validateRfidServerResponse(inputRfid);
-  if (serverResponse.access) {
-    accessStatus = GRANT;
-  }
-  userInfo = serverResponse;
-}
-
-UserInfo validateRfidServerResponse(String inputRfid) {
-  // send RFID to the server
+void sendRFIDtoServer(String rfid) {
   byte sd = stash.create();
-  stash.print("rfid=");
+  stash.print("{\"rfid\":\"");
   stash.print(inputRfid);
+  stash.print("\"}");
   stash.save();
 
-  Stash::prepare(PSTR("POST http://$F/ HTTP/1.1" "\r\n"
-                       "Host: $F" "\r\n"
-                       "Content-Length: $D" "\r\n"
-                       "Content-Type: application/x-www-form-urlencoded" "\r\n"
-                       "\r\n"
-                       "$H"),
-                website, website, stash.size(), sd);
+  Stash::prepare(
+    PSTR(
+      "POST http://$F/$F HTTP/1.1"
+      "\r\n"
+      "Host: $F"
+      "\r\n"
+      "Content-Length: $D"
+      "\r\n"
+      "Content-Type: application/json"
+      "\r\n"
+      "\r\n"
+      "$H"),
+    website, url, website, stash.size(), sd);
 
-  ether.tcpSend();
-
-  // wait for the response
-  String response = "";
-  while (response.length() == 0) {
-    word pos = ether.packetLoop(ether.packetReceive());
-    if (pos) {
-      char *data = (char *)Ethernet::buffer + pos;
-      response = data;
-    }
-  }
-  return parseUserInfoResponse(response);                 
+  session = ether.tcpSend();
 }
 
-UserInfo parseUserInfoResponse(String response) {
-  // response is like "access=true&id=1234567890&name=John&accessTimeDate=2021-04-22 12:00:00"
+void recieveServerResponse() {
+  char* response = ether.tcpReply(session);
+  if (response != nullptr) {
+    userInfo = parseUserInfoResponse(response);
+    if (userInfo.access == true) {
+      accessStatus = GRANT;
+    } else {
+      accessStatus = DENY;
+    }
+    // Serial.println("Response: ");
+    // Serial.println(response);
+  }
+}
+
+UserInfo parseUserInfoResponse(char* response) {
+  /* response is json format like :
+  {
+    "date": "04/30/2024",
+    "rfid_tag": "1234567899",
+    "time": "00:07"
+  }
+  and with statusCode = ok or Unauthorized
+  */
   UserInfo user;
-  int accessIndex = response.indexOf("access=");
-  int idIndex = response.indexOf("id=");
-  int nameIndex = response.indexOf("name=");
-  int accessTimeDateIndex = response.indexOf("accessTimeDate=");
-  user.access = response.substring(accessIndex + 7, idIndex - 1).toInt();
-  user.id = response.substring(idIndex + 3, nameIndex - 1);
-  user.name = response.substring(nameIndex + 5, accessTimeDateIndex - 1);
-  user.accessTimeDate = response.substring(accessTimeDateIndex + 15);
+  String res = String(response);
+  int start = res.indexOf("{");
+  int end = res.indexOf("}");
+  String json = res.substring(start, end + 1);
+  // Serial.println(json);
+  int dateStart = json.indexOf("\"date\":") + 8;
+  int dateEnd = json.indexOf(",", dateStart);
+  user.accessTimeDate = json.substring(dateStart, dateEnd);
+  int rfidStart = json.indexOf("\"rfid_tag\":") + 12;
+  int rfidEnd = json.indexOf(",", rfidStart);
+  user.id = json.substring(rfidStart, rfidEnd);
+  int timeStart = json.indexOf("\"time\":") + 8;
+  int timeEnd = json.indexOf("}", timeStart);
+  user.accessTimeDate += " " + json.substring(timeStart, timeEnd);
+
+  if (res.indexOf("Unauthorized") != -1) {
+    user.access = false;
+  } else {
+    user.access = true;
+  }
+
   return user;
 }
 
