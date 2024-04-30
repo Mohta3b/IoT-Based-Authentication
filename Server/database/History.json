@@ -1,0 +1,12 @@
+[
+    {
+        "username": "exampleUser1",
+        "date": "11/11/2020",
+        "time": "11/10"
+    },
+    {
+        "username": "exampleUser2",
+        "date": "12/12/2020",
+        "time": "12/12"
+    }
+]
