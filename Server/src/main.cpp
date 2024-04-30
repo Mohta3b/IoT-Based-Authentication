@@ -19,7 +19,7 @@ int main(int argc, char *argv[])
 
     auto RFID_verifier = new RFIDVerifier(RFID_TAGS_FILE_PATH);
     auto entrance_history = new entranceHistory(LOG_HISTORY_FILE_PATH);
-    auto http_server = new httpServer(8081, RFID_verifier);
+    auto http_server = new httpServer(80, RFID_verifier);
     auto web_socket_server = new wsServer(1234);
 
     QObject::connect(RFID_verifier, &RFIDVerifier::verified, entrance_history, &entranceHistory::record_log);

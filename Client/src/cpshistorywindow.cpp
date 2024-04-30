@@ -39,7 +39,7 @@ void HistoryWindow::show(const QJsonArray &array)
         auto object       = item.toObject();
         auto structure    = QString("%1-\t%2\t|\t%3\t|\t%4");
 
-        auto username     = object["username"].toString();
+        auto username     = object["rfid_tag"].toString();
         auto date         = object["date"].toString();
         auto time         = object["time"].toString();
 

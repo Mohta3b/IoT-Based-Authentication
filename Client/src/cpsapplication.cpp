@@ -78,7 +78,6 @@ void Application::processMessageReceived(const QString &message) {
         } else if (jsonObject.contains("history") && jsonObject["history"].isArray()) {
 
             QJsonArray historyData = jsonObject["history"].toArray();
-            qDebug() << "history recieved:" << historyData;
             _history->show(historyData);
             _history->show(historyData);
 
