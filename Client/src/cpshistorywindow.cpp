@@ -30,6 +30,7 @@ HistoryWindow::~HistoryWindow()
 void HistoryWindow::show(const QJsonArray &array)
 {
     uint index = 0;
+    _list->clean();
     _list->addItem("index\tusername\t|\tdate\t|\ttime");
 
     for (auto& item : array){

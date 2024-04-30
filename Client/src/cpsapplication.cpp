@@ -80,6 +80,7 @@ void Application::processMessageReceived(const QString &message) {
             QJsonArray historyData = jsonObject["history"].toArray();
             qDebug() << "history recieved:" << historyData;
             _history->show(historyData);
+            _history->show(historyData);
 
         } else {
             qDebug() << "Unexpected JSON format received";
