@@ -49,3 +49,38 @@ The application listens for the textMessageReceived signal. When this signal is 
 ## Usage
 **Connecting to a Server**: Enter the server's WebSocket address along with your username and password, then click the 'اتصال به سرور' button.</br>
 **Viewing History**: Once connected, use the 'مشاهده تاریخچه' button to fetch and display historical session data.
+
+## Request and Response Style of the Client Module
+### Sample request to show on monitor
+```bash
+{  
+  "username": "exampleUser",
+  "date": "dd/mm/yyyy",
+  "time": "hh/mm"
+}
+```
+### History part
+When the 'مشاهده تاریخچه' button is clicked a request like this sample will send to server:
+```bash
+{
+    "command": "fetch_history"
+}
+```
+server in response will send response like this:
+```bash
+{
+    "history":[
+        {
+            "username": "exampleUser1",
+            "date": "dd/mm/yyyy",
+            "time": "hh/mm"
+        },
+        {
+            "username": "exampleUser2",
+            "date": "dd/mm/yyyy",
+            "time": "hh/mm"
+        },
+    ]
+
+}
+```
