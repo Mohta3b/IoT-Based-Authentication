@@ -8,7 +8,7 @@ Using the BD_ADDR directly for authentication may not be secure because it can b
 For stronger security, consider using additional layers of authentication (such as pairing, encryption, or custom UUIDs).
 We’ll need a Bluetooth module (such as HC-05 or HC-06) to enable Bluetooth communication with other devices.
 These modules provide a serial interface (UART) for communication.
-## 2: Can we use buetoorh modules without pairing?
+## 2: Can we use bluetooth modules without pairing?
 Bluetooth protocols (such as RFCOMM) usually require pairing for secure communication. It is possible to use Bluetooth communication without pairing, but there are important considerations: <br>
 **Security:** When you avoid pairing, security is significantly reduced. Anyone within range can potentially intercept or spoof the communication. <br>
 **Unique Identifier:** You can use the Bluetooth MAC address (BD_ADDR) as a unique identifier. However, it is not secret or secure. <br>
