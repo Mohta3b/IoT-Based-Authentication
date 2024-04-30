@@ -191,7 +191,7 @@ UserInfo parseUserInfoResponse(char* response) {
   int start = res.indexOf("{");
   int end = res.indexOf("}");
   String json = res.substring(start, end + 1);
-  Serial.println(json);
+  // Serial.println(json);
   int dateStart = json.indexOf("\"date\":") + 8;
   int dateEnd = json.indexOf(",", dateStart);
   user.accessTimeDate = json.substring(dateStart, dateEnd);
